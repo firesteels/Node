@@ -19,18 +19,21 @@ use serde_json::json;
 use serde_json::{Map, Value};
 use std::path::PathBuf;
 use crate::blockchain::bip39::Bip39;
-use crate::sub_lib::cryptde::PlainData;
-use crate::db_config::typed_config_layer::{decode_bytes, encode_bytes};
+use crate::sub_lib::cryptde::{PlainData, CryptDE};
+use crate::db_config::typed_config_layer::{encode_bytes, decode_bytes};
+use crate::sub_lib::neighborhood::NodeDescriptor;
+use crate::sub_lib::cryptde_real::CryptDEReal;
 
 const DUMP_CONFIG_HELP: &str =
     "Dump the configuration of MASQ Node to stdout in JSON. Used chiefly by UIs.";
 
 pub fn dump_config(args: &[String], streams: &mut StdStreams) -> Result<i32, ConfiguratorError> {
     let (real_user, data_directory, chain_id, password_opt) = distill_args(&RealDirsWrapper {}, args, streams)?;
+    let cryptde = CryptDEReal::new (chain_id);
     PrivilegeDropperReal::new().drop_privileges(&real_user);
     let config_dao = make_config_dao(&data_directory, chain_id);
     let configuration = config_dao.get_all().expect("Couldn't fetch configuration");
-    let json = configuration_to_json(configuration, password_opt);
+    let json = configuration_to_json(configuration, password_opt, &cryptde);
     write_string(streams, json);
     Ok(0)
 }
@@ -46,7 +49,7 @@ fn write_string(streams: &mut StdStreams, json: String) {
         .expect("Couldn't flush JSON to stdout");
 }
 
-fn configuration_to_json(configuration: Vec<ConfigDaoRecord>, password_opt: Option<String>) -> String {
+fn configuration_to_json(configuration: Vec<ConfigDaoRecord>, password_opt: Option<String>, cryptde: &dyn CryptDE) -> String {
     let mut map = Map::new();
     configuration.into_iter().for_each(|record| {
         let json_name = record.name.to_mixed_case();
@@ -58,7 +61,7 @@ fn configuration_to_json(configuration: Vec<ConfigDaoRecord>, password_opt: Opti
 eprintln! ("Encrypted value for {}: '{}'", json_name, value);
                 let decrypted_value = Bip39::decrypt_bytes(&value, password).expect("Test-drive me!");
 eprintln! ("Decrypted value: {:?}", decrypted_value);
-                Some (translate_bytes (&json_name, decrypted_value))
+                Some (translate_bytes (&json_name, decrypted_value, cryptde))
             }
         };
         let json_value = match value_opt {
@@ -71,9 +74,21 @@ eprintln! ("Decrypted value: {:?}", decrypted_value);
     serde_json::to_string_pretty(&value).expect("Couldn't serialize configuration to JSON")
 }
 
-fn translate_bytes (json_name: &str, input: PlainData) -> String {
+fn translate_bytes (json_name: &str, input: PlainData, cryptde: &dyn CryptDE) -> String {
     match json_name {
         "exampleEncrypted" => encode_bytes(Some (input)).expect("Test-drive me!").expect("Test-drive me"),
+        "pastNeighbors" => {
+            let string = String::from_utf8(input.into()).expect("Test-drive me!");
+eprintln! ("pastNeighbors: string = '{}'", string);
+            let bytes = decode_bytes(Some (string)).expect ("Test-drive me!").expect("Test-drive me!");
+eprintln! ("pastNeighbors: bytes = {:?}", bytes);
+            let node_descriptors = serde_cbor::de::from_slice::<Vec<NodeDescriptor>>(&bytes.as_slice()).expect("Test-drive me!");
+eprintln! ("pastNeighbors: NodeDescriptors: {:?}", node_descriptors);
+            let nd_string = node_descriptors.into_iter().map (|nd| nd.to_string (cryptde))
+                .collect::<Vec<String>>().join(",");
+eprintln! ("pastNeighbors: final string = {}", nd_string);
+            nd_string
+        },
         _ => String::from_utf8 (input.into()).expect ("Test-drive me!"),
     }
 }
@@ -286,8 +301,8 @@ mod tests {
                 .unwrap();
             persistent_config.set_clandestine_port(3456).unwrap();
             persistent_config.set_past_neighbors(Some (vec![
-                NodeDescriptor::from_str (main_cryptde(), "QUJDREVGRw@1.2.3.4:1234").unwrap(),
-                NodeDescriptor::from_str (main_cryptde(), "QkNERUZHSA@2.3.4.5:2345").unwrap(),
+                NodeDescriptor::from_str (main_cryptde(), "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU@1.2.3.4:1234").unwrap(),
+                NodeDescriptor::from_str (main_cryptde(), "QkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWjAxMjM0NTY@2.3.4.5:2345").unwrap(),
             ]), "password").unwrap();
         }
         let args_vec: Vec<String> = ArgsBuilder::new()
@@ -310,7 +325,6 @@ mod tests {
             .initialize(&data_dir, DEFAULT_CHAIN_ID, false)
             .unwrap();
         let dao = Box::new (ConfigDaoReal::new (conn));
-        let scl = SecureConfigLayer::new();
         let check = |key: &str, expected_value: &str| {
             let actual_value = match map.get(key).unwrap() {
                 Value::String(s) => s,
@@ -325,7 +339,7 @@ mod tests {
             "0x0123456789012345678901234567890123456789",
         );
         check("gasPrice", "1");
-        check("pastNeighbors", &scl.decrypt (dao.get ("past_neighbors").unwrap(), Some ("password".to_string()), &dao).unwrap().unwrap());
+        check("pastNeighbors", "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU@1.2.3.4:1234,QkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWjAxMjM0NTY@2.3.4.5:2345");
         check("schemaVersion", CURRENT_SCHEMA_VERSION);
         check(
             "startBlock",
