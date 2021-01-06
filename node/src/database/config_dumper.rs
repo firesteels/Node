@@ -108,7 +108,7 @@ mod tests {
     use crate::db_config::persistent_configuration::{
         PersistentConfiguration, PersistentConfigurationReal,
     };
-    use crate::test_utils::ArgsBuilder;
+    use crate::test_utils::{ArgsBuilder, main_cryptde};
     use bip39::{Language, MnemonicType, Seed};
     use masq_lib::test_utils::environment_guard::ClapGuard;
     use masq_lib::test_utils::fake_stream_holder::FakeStreamHolder;
@@ -116,6 +116,7 @@ mod tests {
         ensure_node_home_directory_exists, DEFAULT_CHAIN_ID, TEST_DEFAULT_CHAIN_NAME,
     };
     use serde_json::value::Value::Null;
+    use crate::sub_lib::neighborhood::NodeDescriptor;
 
     #[test]
     fn dump_config_creates_database_if_nonexistent() {
@@ -158,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn dump_config_dumps_existing_database() {
+    fn dump_config_dumps_existing_database_without_password() {
         let _clap_guard = ClapGuard::new();
         let data_dir = ensure_node_home_directory_exists(
             "config_dumper",
@@ -166,6 +167,7 @@ mod tests {
         )
         .join("Substratum")
         .join(TEST_DEFAULT_CHAIN_NAME);
+        let seed = Seed::new(&Bip39::mnemonic(MnemonicType::Words24, Language::English), "passphrase");
         let mut holder = FakeStreamHolder::new();
         {
             let conn = DbInitializerReal::new()
@@ -175,16 +177,17 @@ mod tests {
             persistent_config.change_password(None, "password").unwrap();
             persistent_config
                 .set_wallet_info(
-                    &Seed::new(
-                        &Bip39::mnemonic(MnemonicType::Words24, Language::English),
-                        "",
-                    ),
+                    &seed,
                     "m/60'/44'/0'/4/4",
                     "0x0123456789012345678901234567890123456789",
                     "password",
                 )
                 .unwrap();
             persistent_config.set_clandestine_port(3456).unwrap();
+            persistent_config.set_past_neighbors(Some (vec![
+                NodeDescriptor::from_str (main_cryptde(), "QUJDREVGRw@1.2.3.4:1234").unwrap(),
+                NodeDescriptor::from_str (main_cryptde(), "QkNERUZHSA@2.3.4.5:2345").unwrap(),
+            ]), "password").unwrap();
         }
         let args_vec: Vec<String> = ArgsBuilder::new()
             .param("--data-directory", data_dir.to_str().unwrap())
@@ -201,6 +204,10 @@ mod tests {
             Value::Object(map) => map,
             x => panic!("Expected JSON object; found {:?}", x),
         };
+        let conn = DbInitializerReal::new()
+            .initialize(&data_dir, DEFAULT_CHAIN_ID, false)
+            .unwrap();
+        let dao = ConfigDaoReal::new (conn);
         let check = |key: &str, expected_value: &str| {
             let actual_value = match map.get(key).unwrap() {
                 Value::String(s) => s,
@@ -208,8 +215,6 @@ mod tests {
             };
             assert_eq!(actual_value, expected_value);
         };
-        let check_null = |key: &str| assert_eq!(map.get(key), Some(&Null));
-        let check_present = |key: &str| assert_eq!(map.get(key).is_some(), true);
         check("clandestinePort", "3456");
         check("consumingWalletDerivationPath", "m/60'/44'/0'/4/4");
         check(
@@ -217,14 +222,14 @@ mod tests {
             "0x0123456789012345678901234567890123456789",
         );
         check("gasPrice", "1");
-        check_null("pastNeighbors");
+        check("pastNeighbors", &dao.get ("past_neighbors").unwrap().value_opt.unwrap());
         check("schemaVersion", CURRENT_SCHEMA_VERSION);
         check(
             "startBlock",
             &contract_creation_block_from_chain_id(chain_id_from_name(TEST_DEFAULT_CHAIN_NAME))
                 .to_string(),
         );
-        check_present("exampleEncrypted");
-        check_present("seed");
+        check("exampleEncrypted", &dao.get ("example_encrypted").unwrap().value_opt.unwrap());
+        check("seed", &dao.get ("seed").unwrap().value_opt.unwrap());
     }
 }
