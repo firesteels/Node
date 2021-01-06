@@ -217,11 +217,9 @@ impl SecureConfigLayer {
         dao: &Box<T>,
     ) -> Result<(), SecureConfigLayerError> {
         let mut example_data = [0u8; 32];
-        rand::thread_rng().fill (&mut example_data);
-eprintln! ("Installing example_encrypted. Data: {:?}", example_data);
+        rand::thread_rng().fill(&mut example_data);
         let example_encrypted =
             Bip39::encrypt_bytes(&example_data, new_password).expect("Encryption failed");
-eprintln! ("Encrypted data: {}", example_encrypted);
         dao.set(EXAMPLE_ENCRYPTED, Some(example_encrypted))
             .map_err(SecureConfigLayerError::from)
     }
