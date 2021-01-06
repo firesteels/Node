@@ -11,7 +11,6 @@ use actix::System;
 use futures::future::Future;
 use masq_lib::command::{Command, StdStreams};
 use masq_lib::shared_schema::ConfiguratorError;
-use crate::sub_lib::cryptde_real::CryptDEReal;
 
 #[derive(Debug, PartialEq)]
 enum Mode {

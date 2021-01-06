@@ -58,10 +58,10 @@ fn configuration_to_json(configuration: Vec<ConfigDaoRecord>, password_opt: Opti
             (Some(value), false, _) => Some (value),
             (Some(value), true, None) => Some (value),
             (Some(value), true, Some (password)) => {
-eprintln! ("Encrypted value for {}: '{}'", json_name, value);
-                let decrypted_value = Bip39::decrypt_bytes(&value, password).expect("Test-drive me!");
-eprintln! ("Decrypted value: {:?}", decrypted_value);
-                Some (translate_bytes (&json_name, decrypted_value, cryptde))
+                match Bip39::decrypt_bytes(&value, password) {
+                    Ok(decrypted_value) => Some (translate_bytes (&json_name, decrypted_value, cryptde)),
+                    Err(_) => Some (value),
+                }
             }
         };
         let json_value = match value_opt {
@@ -75,21 +75,22 @@ eprintln! ("Decrypted value: {:?}", decrypted_value);
 }
 
 fn translate_bytes (json_name: &str, input: PlainData, cryptde: &dyn CryptDE) -> String {
+    let to_utf8 = |data: PlainData| {
+        String::from_utf8(data.into()).expect("Database is corrupt: past_neighbors hex string cannot be interpreted as UTF-8")
+    };
     match json_name {
-        "exampleEncrypted" => encode_bytes(Some (input)).expect("Test-drive me!").expect("Test-drive me"),
+        "exampleEncrypted" => encode_bytes(Some (input)).expect("Never happen.").expect("Value disappeared"),
         "pastNeighbors" => {
-            let string = String::from_utf8(input.into()).expect("Test-drive me!");
-eprintln! ("pastNeighbors: string = '{}'", string);
-            let bytes = decode_bytes(Some (string)).expect ("Test-drive me!").expect("Test-drive me!");
-eprintln! ("pastNeighbors: bytes = {:?}", bytes);
-            let node_descriptors = serde_cbor::de::from_slice::<Vec<NodeDescriptor>>(&bytes.as_slice()).expect("Test-drive me!");
-eprintln! ("pastNeighbors: NodeDescriptors: {:?}", node_descriptors);
-            let nd_string = node_descriptors.into_iter().map (|nd| nd.to_string (cryptde))
-                .collect::<Vec<String>>().join(",");
-eprintln! ("pastNeighbors: final string = {}", nd_string);
-            nd_string
+            let string = to_utf8(input);
+            let bytes = decode_bytes(Some (string))
+                .expect ("Database is corrupt: past_neighbors cannot be decoded")
+                .expect("Value disappeared");
+            let node_descriptors = serde_cbor::de::from_slice::<Vec<NodeDescriptor>>(&bytes.as_slice())
+                .expect("Database is corrupt: past_neighbors contains bad CBOR");
+            node_descriptors.into_iter().map (|nd| nd.to_string (cryptde))
+                .collect::<Vec<String>>().join(",")
         },
-        _ => String::from_utf8 (input.into()).expect ("Test-drive me!"),
+        _ => to_utf8(input),
     }
 }
 
@@ -157,7 +158,6 @@ mod tests {
     use crate::sub_lib::neighborhood::NodeDescriptor;
     use crate::sub_lib::cryptde::PlainData;
     use crate::db_config::typed_config_layer::encode_bytes;
-    use crate::db_config::secure_config_layer::SecureConfigLayer;
 
     #[test]
     fn dump_config_creates_database_if_nonexistent() {
@@ -351,5 +351,108 @@ mod tests {
         let expected_ee_string = encode_bytes(Some (expected_ee_decrypted)).unwrap().unwrap();
         check("exampleEncrypted", &expected_ee_string);
         check("seed", &encode_bytes(Some(PlainData::new(seed.as_ref()))).unwrap().unwrap());
+    }
+
+    #[test]
+    fn dump_config_dumps_existing_database_with_incorrect_password() {
+        let _clap_guard = ClapGuard::new();
+        let data_dir = ensure_node_home_directory_exists(
+            "config_dumper",
+            "dump_config_dumps_existing_database",
+        )
+        .join("MASQ")
+        .join(TEST_DEFAULT_CHAIN_NAME);
+        let seed = Seed::new(&Bip39::mnemonic(MnemonicType::Words24, Language::English), "passphrase");
+        let mut holder = FakeStreamHolder::new();
+        {
+            let conn = DbInitializerReal::new()
+                .initialize(&data_dir, DEFAULT_CHAIN_ID, true)
+                .unwrap();
+            let mut persistent_config = PersistentConfigurationReal::from(conn);
+            persistent_config.change_password(None, "password").unwrap();
+            persistent_config
+                .set_wallet_info(
+                    &seed,
+                    "m/60'/44'/0'/4/4",
+                    "0x0123456789012345678901234567890123456789",
+                    "password",
+                )
+                .unwrap();
+            persistent_config.set_clandestine_port(3456).unwrap();
+            persistent_config.set_past_neighbors(Some (vec![
+                NodeDescriptor::from_str (main_cryptde(), "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVowMTIzNDU@1.2.3.4:1234").unwrap(),
+                NodeDescriptor::from_str (main_cryptde(), "QkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWjAxMjM0NTY@2.3.4.5:2345").unwrap(),
+            ]), "password").unwrap();
+        }
+        let args_vec: Vec<String> = ArgsBuilder::new()
+            .param("--data-directory", data_dir.to_str().unwrap())
+            .param("--real-user", "123::")
+            .param("--chain", TEST_DEFAULT_CHAIN_NAME)
+            .param("--db-password", "incorrect")
+            .opt("--dump-config")
+            .into();
+
+        let result = dump_config(args_vec.as_slice(), &mut holder.streams()).unwrap();
+
+        assert_eq!(result, 0);
+        let output = holder.stdout.get_string();
+        let map = match serde_json::from_str(&output).unwrap() {
+            Value::Object(map) => map,
+            x => panic!("Expected JSON object; found {:?}", x),
+        };
+        let conn = DbInitializerReal::new()
+            .initialize(&data_dir, DEFAULT_CHAIN_ID, false)
+            .unwrap();
+        let dao = Box::new (ConfigDaoReal::new (conn));
+        let check = |key: &str, expected_value: &str| {
+            let actual_value = match map.get(key).unwrap() {
+                Value::String(s) => s,
+                x => panic!("Expected JSON string; found {:?}", x),
+            };
+            assert_eq!(actual_value, expected_value);
+        };
+        check("clandestinePort", "3456");
+        check("consumingWalletDerivationPath", "m/60'/44'/0'/4/4");
+        check(
+            "earningWalletAddress",
+            "0x0123456789012345678901234567890123456789",
+        );
+        check("gasPrice", "1");
+        check("pastNeighbors", &dao.get ("past_neighbors").unwrap().value_opt.unwrap());
+        check("schemaVersion", CURRENT_SCHEMA_VERSION);
+        check(
+            "startBlock",
+            &contract_creation_block_from_chain_id(chain_id_from_name(TEST_DEFAULT_CHAIN_NAME))
+                .to_string(),
+        );
+        check("exampleEncrypted", &dao.get ("example_encrypted").unwrap().value_opt.unwrap());
+        check("seed", &dao.get ("seed").unwrap().value_opt.unwrap());
+    }
+
+    #[test]
+    #[should_panic (expected = "Database is corrupt: past_neighbors hex string cannot be interpreted as UTF-8")]
+    fn decode_bytes_handles_decode_error_for_past_neighbors() {
+        let cryptde = main_cryptde();
+        let data = PlainData::new (&[192, 193]);
+
+        let _ = translate_bytes("pastNeighbors", data, cryptde);
+    }
+
+    #[test]
+    #[should_panic (expected = "Database is corrupt: past_neighbors cannot be decoded")]
+    fn decode_bytes_handles_utf8_error_for_past_neighbors() {
+        let cryptde = main_cryptde();
+        let data = PlainData::new (b"invalid hex");
+
+        let _ = translate_bytes("pastNeighbors", data, cryptde);
+    }
+
+    #[test]
+    #[should_panic (expected = "Database is corrupt: past_neighbors contains bad CBOR")]
+    fn decode_bytes_handles_bad_cbor_for_past_neighbors() {
+        let cryptde = main_cryptde();
+        let data = PlainData::new (b"AABBCC");
+
+        let _ = translate_bytes("pastNeighbors", data, cryptde);
     }
 }
