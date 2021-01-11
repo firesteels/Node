@@ -31,7 +31,7 @@ impl GenerateWalletsCommand {
                 .expect("word-count not properly defaulted")
                 .to_string()
                 .parse::<usize>()
-                .unwrap(), // TODO: Drive this out!
+                .expect("word-count allowable values are wrong"),
             language: matches
                 .value_of("language")
                 .expect("language not properly defaulted")
@@ -119,7 +119,7 @@ pub fn generate_wallets_subcommand() -> App<'static, 'static> {
                 "Italian", "Japanese", "Korean", "Spanish"])
         )
         .arg(Arg::with_name ("passphrase")
-            .help ("An additional word--any word--to require at the end of the mnemonic phrase to recover the wallet pair")
+            .help ("An optional additional word (it can be any word) that the wallet-recovery process should require at the end of the mnemonic phrase")
             .long ("passphrase")
             .value_name ("PASSPHRASE")
             .required (false)

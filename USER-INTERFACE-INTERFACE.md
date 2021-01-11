@@ -284,7 +284,7 @@ may not have any database password at all.
 
 There's no way to make the Node tell you what the database password is, but if you have an idea
 what it might be, you can check your idea by sending this message with your idea in the
-`dbPasswordOpt` field. If you're checking to see whether there's no password, pass `null` in this
+`dbPasswordOpt` field. If you're checking to see whether there's no password, omit this
 field.
 
 #### `checkPassword`
@@ -357,7 +357,7 @@ version. If this attempt fails for some reason, this value can be used to diagno
 
 * `clandestinePort`: The port on which the Node is currently listening for connections from other Nodes.
 
-* `gasPrice`: The Node will not pay more than this number of wei for gas to complete a transaction.
+* `gasPrice`: The Node will not pay more than this number of Gwei for gas to complete a transaction.
 
 * `mnemonicSeedOpt`: This is a secret string of hexadecimal digits that corresponds exactly with the mnemonic
 phrase, plus any "25th word" mnemonic passphrase. You won't see this if the password isn't correct. You also
