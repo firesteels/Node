@@ -118,7 +118,7 @@ impl Main {
         processor: &mut dyn CommandProcessor,
         streams: &mut StdStreams<'_>,
     ) -> u8 {
-        let mut line_reader = self.buf_read_factory.make_interactive();
+        let mut line_reader = self.buf_read_factory.make();
         loop {
             let args = match Self::accept_subcommand(&mut line_reader) {
                 Ok(Some(args)) => args,
@@ -193,12 +193,8 @@ mod tests {
     }
 
     impl BufReadFactory for BufReadFactoryMock {
-        fn make_interactive(&self) -> Box<dyn BufRead> {
+        fn make(&self) -> Box<dyn BufRead> {
             Box::new(self.interactive.borrow_mut().take().unwrap())
-        }
-
-        fn make_non_interactive(&self) -> Box<dyn BufRead> {
-            unimplemented!()
         }
     }
 
