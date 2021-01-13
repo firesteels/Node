@@ -19,8 +19,8 @@ use node_lib::sub_lib::neighborhood::RatePack;
 use node_lib::sub_lib::neighborhood::DEFAULT_RATE_PACK;
 use node_lib::sub_lib::neighborhood::ZERO_RATE_PACK;
 use node_lib::sub_lib::node_addr::NodeAddr;
-use node_lib::sub_lib::wallet::{
-    Wallet, DEFAULT_CONSUMING_DERIVATION_PATH, DEFAULT_EARNING_DERIVATION_PATH,
+use masq_lib::utils::{
+    DEFAULT_CONSUMING_DERIVATION_PATH, DEFAULT_EARNING_DERIVATION_PATH,
 };
 use regex::Regex;
 use rustc_hex::{FromHex, ToHex};
@@ -33,6 +33,7 @@ use std::str::FromStr;
 use std::string::ToString;
 use std::thread;
 use std::time::Duration;
+use node_lib::sub_lib::wallet::Wallet;
 
 pub const DATA_DIRECTORY: &str = "/node_root/home";
 
