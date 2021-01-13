@@ -47,8 +47,7 @@ fn verify_bill_payment() {
     let web3 = Web3::new(http.clone());
     let deriv_path = derivation_path(0, 0);
     let seed = make_seed();
-    let (contract_owner_wallet, contract_owner_secret_key) =
-        make_node_wallet(&seed, &deriv_path);
+    let (contract_owner_wallet, contract_owner_secret_key) = make_node_wallet(&seed, &deriv_path);
 
     let contract_addr = deploy_smart_contract(&contract_owner_wallet, &web3, cluster.chain_id);
     assert_eq!(
