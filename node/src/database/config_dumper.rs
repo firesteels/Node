@@ -177,6 +177,7 @@ mod tests {
     use masq_lib::test_utils::utils::{
         ensure_node_home_directory_exists, DEFAULT_CHAIN_ID, TEST_DEFAULT_CHAIN_NAME,
     };
+    use masq_lib::utils::derivation_path;
 
     #[test]
     fn dump_config_creates_database_if_nonexistent() {
@@ -223,7 +224,7 @@ mod tests {
         let _clap_guard = ClapGuard::new();
         let data_dir = ensure_node_home_directory_exists(
             "config_dumper",
-            "dump_config_dumps_existing_database",
+            "dump_config_dumps_existing_database_without_password",
         )
         .join("MASQ")
         .join(TEST_DEFAULT_CHAIN_NAME);
@@ -241,7 +242,7 @@ mod tests {
             persistent_config
                 .set_wallet_info(
                     &seed,
-                    "m/60'/44'/0'/4/4",
+                    &derivation_path(4, 4),
                     "0x0123456789012345678901234567890123456789",
                     "password",
                 )
@@ -286,7 +287,7 @@ mod tests {
             assert_eq!(actual_value, expected_value);
         };
         check("clandestinePort", "3456");
-        check("consumingWalletDerivationPath", "m/60'/44'/0'/4/4");
+        check("consumingWalletDerivationPath", &derivation_path(4, 4));
         check(
             "earningWalletAddress",
             "0x0123456789012345678901234567890123456789",
@@ -314,7 +315,7 @@ mod tests {
         let _clap_guard = ClapGuard::new();
         let data_dir = ensure_node_home_directory_exists(
             "config_dumper",
-            "dump_config_dumps_existing_database",
+            "dump_config_dumps_existing_database_with_correct_password",
         )
         .join("MASQ")
         .join(TEST_DEFAULT_CHAIN_NAME);
@@ -332,7 +333,7 @@ mod tests {
             persistent_config
                 .set_wallet_info(
                     &seed,
-                    "m/60'/44'/0'/4/4",
+                    &derivation_path(4, 4),
                     "0x0123456789012345678901234567890123456789",
                     "password",
                 )
@@ -384,7 +385,7 @@ mod tests {
             assert_eq!(actual_value, expected_value);
         };
         check("clandestinePort", "3456");
-        check("consumingWalletDerivationPath", "m/60'/44'/0'/4/4");
+        check("consumingWalletDerivationPath", &derivation_path(4, 4));
         check(
             "earningWalletAddress",
             "0x0123456789012345678901234567890123456789",
@@ -414,7 +415,7 @@ mod tests {
         let _clap_guard = ClapGuard::new();
         let data_dir = ensure_node_home_directory_exists(
             "config_dumper",
-            "dump_config_dumps_existing_database",
+            "dump_config_dumps_existing_database_with_incorrect_password",
         )
         .join("MASQ")
         .join(TEST_DEFAULT_CHAIN_NAME);
@@ -432,7 +433,7 @@ mod tests {
             persistent_config
                 .set_wallet_info(
                     &seed,
-                    "m/60'/44'/0'/4/4",
+                    &derivation_path(4, 4),
                     "0x0123456789012345678901234567890123456789",
                     "password",
                 )
@@ -484,7 +485,7 @@ mod tests {
             assert_eq!(actual_value, expected_value);
         };
         check("clandestinePort", "3456");
-        check("consumingWalletDerivationPath", "m/60'/44'/0'/4/4");
+        check("consumingWalletDerivationPath", &derivation_path(4, 4));
         check(
             "earningWalletAddress",
             "0x0123456789012345678901234567890123456789",
