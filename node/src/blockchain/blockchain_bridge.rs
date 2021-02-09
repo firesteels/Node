@@ -95,41 +95,7 @@ impl Handler<ReportAccountsPayable> for BlockchainBridge {
         msg: ReportAccountsPayable,
         _ctx: &mut Self::Context,
     ) -> <Self as Handler<ReportAccountsPayable>>::Result {
-        MessageResult(match self.consuming_wallet.as_ref() {
-            Some(consuming_wallet) => Ok(msg
-                .accounts
-                .iter()
-                .map(|payable| {
-                    match self
-                        .blockchain_interface
-                        .get_transaction_count(&consuming_wallet)
-                    {
-                        Ok(nonce) => {
-                            match self.blockchain_interface.send_transaction(
-                                &consuming_wallet,
-                                &payable.wallet,
-                                u64::try_from(payable.balance).unwrap_or_else(|_| {
-                                    panic!("Lost payable amount precision: {}", payable.balance)
-                                }),
-                                nonce,
-                                self.persistent_config.gas_price().expect("drive-me-out!"), //TODO result matching
-                            ) {
-                                Ok(hash) => Ok(Payment::new(
-                                    payable.wallet.clone(),
-                                    u64::try_from(payable.balance).unwrap_or_else(|_| {
-                                        panic!("Lost payable amount precision: {}", payable.balance)
-                                    }),
-                                    hash,
-                                )),
-                                Err(e) => Err(e),
-                            }
-                        }
-                        Err(e) => Err(e),
-                    }
-                })
-                .collect::<Vec<BlockchainResult<Payment>>>()),
-            None => Err(String::from("No consuming wallet specified")),
-        })
+        self.handle_report_account_payable(msg)
     }
 }
 
@@ -167,6 +133,61 @@ impl BlockchainBridge {
             ui_sub: recipient!(addr, NodeFromUiMessage),
         }
     }
+    fn handle_report_account_payable(
+        &self,
+        msg: ReportAccountsPayable,
+    ) -> MessageResult<ReportAccountsPayable> {
+        MessageResult(match self.consuming_wallet.as_ref() {
+            Some(consuming_wallet) => {
+                let gas_price = match self.persistent_config.gas_price() {
+                    Ok(num) => num,
+                    Err(e) => {
+                        return MessageResult(Err(format!(
+                            "ReportAccountPayable: gas-price: {:?}",
+                            e
+                        )))
+                    }
+                };
+                Ok(msg
+                    .accounts
+                    .iter()
+                    .map(|payable| {
+                        match self
+                            .blockchain_interface
+                            .get_transaction_count(&consuming_wallet)
+                        {
+                            Ok(nonce) => {
+                                let amount = u64::try_from(payable.balance).unwrap_or_else(|_| {
+                                    panic!("Lost payable amount precision: {}", payable.balance)
+                                });
+                                match self.blockchain_interface.send_transaction(
+                                    &consuming_wallet,
+                                    &payable.wallet,
+                                    amount,
+                                    nonce,
+                                    gas_price,
+                                ) {
+                                    Ok(hash) => {
+                                        let amount =
+                                            u64::try_from(payable.balance).unwrap_or_else(|_| {
+                                                panic!(
+                                                    "Lost payable amount precision: {}",
+                                                    payable.balance
+                                                )
+                                            });
+                                        Ok(Payment::new(payable.wallet.clone(), amount, hash))
+                                    }
+                                    Err(e) => Err(e),
+                                }
+                            }
+                            Err(e) => Err(e),
+                        }
+                    })
+                    .collect::<Vec<BlockchainResult<Payment>>>())
+            }
+            None => Err(String::from("No consuming wallet specified")),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -178,6 +199,7 @@ mod tests {
         contract_address, Balance, BlockchainError, BlockchainResult, Nonce, Transaction,
         Transactions,
     };
+    use crate::db_config::persistent_configuration::PersistentConfigError;
     use crate::test_utils::logging::init_test_logging;
     use crate::test_utils::logging::TestLogHandler;
     use crate::test_utils::persistent_configuration_mock::PersistentConfigurationMock;
@@ -589,6 +611,37 @@ mod tests {
         let result = &request.wait().unwrap();
 
         assert_eq!(result, &Err("No consuming wallet specified".to_string()));
+    }
+
+    #[test]
+    fn handle_report_account_payable_manages_gas_price_error() {
+        let blockchain_interface_mock = BlockchainInterfaceMock::default()
+            .get_transaction_count_result(Ok(web3::types::U256::from(1)));
+        let persistent_configuration_mock = PersistentConfigurationMock::new()
+            .gas_price_result(Err(PersistentConfigError::TransactionError));
+        let consuming_wallet = make_wallet("somewallet");
+        let subject = BlockchainBridge::new(
+            &bc_from_wallet(Some(consuming_wallet.clone())),
+            Box::new(blockchain_interface_mock),
+            Box::new(persistent_configuration_mock),
+        );
+        let message = ReportAccountsPayable {
+            accounts: vec![PayableAccount {
+                wallet: make_wallet("blah"),
+                balance: 42,
+                last_paid_timestamp: SystemTime::now(),
+                pending_payment_transaction: None,
+            }],
+        };
+
+        let result = subject.handle_report_account_payable(message);
+
+        assert_eq!(
+            result.0,
+            Err(String::from(
+                "ReportAccountPayable: gas-price: TransactionError"
+            ))
+        )
     }
 
     #[test]

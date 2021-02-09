@@ -1610,10 +1610,7 @@ mod tests {
             .unwrap();
         let config_dao = ConfigDaoReal::new(conn);
         let persistent_config = PersistentConfigurationReal::new(Box::new(config_dao));
-        assert_eq!(
-            1234u16,
-            persistent_config.clandestine_port().unwrap()
-        );
+        assert_eq!(1234u16, persistent_config.clandestine_port().unwrap());
         assert_eq!(
             subject
                 .config

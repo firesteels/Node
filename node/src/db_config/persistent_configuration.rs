@@ -186,9 +186,9 @@ impl PersistentConfiguration for PersistentConfigurationReal {
     }
 
     fn gas_price(&self) -> Result<u64, PersistentConfigError> {
-        match decode_u64(self.dao.get("gas_price")?.value_opt){
+        match decode_u64(self.dao.get("gas_price")?.value_opt) {
             Ok(val) => Ok(val.expect("ever-supplied value missing; database is corrupt!")),
-            Err(e) => Err(PersistentConfigError::from(e))
+            Err(e) => Err(PersistentConfigError::from(e)),
         }
     }
 
@@ -345,9 +345,9 @@ impl PersistentConfiguration for PersistentConfigurationReal {
     }
 
     fn start_block(&self) -> Result<u64, PersistentConfigError> {
-        match decode_u64(self.dao.get("start_block")?.value_opt){
+        match decode_u64(self.dao.get("start_block")?.value_opt) {
             Ok(val) => Ok(val.expect("ever-supplied value missing; database is corrupt!")),
-            Err(e) => Err(PersistentConfigError::from(e))
+            Err(e) => Err(PersistentConfigError::from(e)),
         }
     }
 
@@ -542,9 +542,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-    expected = "ever-supplied value missing; database is corrupt!"
-    )]
+    #[should_panic(expected = "ever-supplied value missing; database is corrupt!")]
     fn clandestine_port_panics_if_none_got_from_database() {
         let config_dao = ConfigDaoMock::new().get_result(Ok(ConfigDaoRecord::new(
             "clandestine_port",
@@ -600,7 +598,7 @@ mod tests {
 
         let result = subject.clandestine_port().unwrap();
 
-        assert_eq!(result,4747);
+        assert_eq!(result, 4747);
         let get_params = get_params_arc.lock().unwrap();
         assert_eq!(*get_params, vec!["clandestine_port".to_string()]);
     }
@@ -1390,8 +1388,6 @@ mod tests {
         let _ = subject.start_block();
     }
 
-
-
     #[test]
     fn set_start_block_success() {
         let set_params_arc = Arc::new(Mutex::new(vec![]));
@@ -1431,7 +1427,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "ever-supplied value missing; database is corrupt!")]
-    fn gas_price_does_not_tolerate_optional_output(){
+    fn gas_price_does_not_tolerate_optional_output() {
         let config_dao = Box::new(ConfigDaoMock::new().get_result(Ok(ConfigDaoRecord::new(
             "gas_price",
             None,

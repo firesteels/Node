@@ -520,7 +520,7 @@ impl Configurator {
         field_name: &str,
     ) -> Result<T, MessageError> {
         match result {
-            Ok(v)=> Ok(v),
+            Ok(v) => Ok(v),
             Err(_) => Err((CONFIGURATOR_READ_ERROR, field_name.to_string())),
         }
     }
@@ -1663,7 +1663,8 @@ mod tests {
 
     #[test]
     fn value_required_plain_handles_error() {
-        let result: Result<u64, MessageError> = Configurator::value_required(Err(PersistentConfigError::NotPresent), "Field");
+        let result: Result<u64, MessageError> =
+            Configurator::value_required(Err(PersistentConfigError::NotPresent), "Field");
 
         assert_eq!(result, Err((CONFIGURATOR_READ_ERROR, "Field".to_string())))
     }
