@@ -15,7 +15,7 @@ pub struct PersistentConfigurationMock {
     check_password_results: RefCell<Vec<Result<bool, PersistentConfigError>>>,
     change_password_params: Arc<Mutex<Vec<(Option<String>, String)>>>,
     change_password_results: RefCell<Vec<Result<(), PersistentConfigError>>>,
-    clandestine_port_results: RefCell<Vec<Result<Option<u16>, PersistentConfigError>>>,
+    clandestine_port_results: RefCell<Vec<Result<u16, PersistentConfigError>>>,
     set_clandestine_port_params: Arc<Mutex<Vec<u16>>>,
     set_clandestine_port_results: RefCell<Vec<Result<(), PersistentConfigError>>>,
     gas_price_results: RefCell<Vec<Result<u64, PersistentConfigError>>>,
@@ -72,7 +72,7 @@ impl PersistentConfiguration for PersistentConfigurationMock {
         self.change_password_results.borrow_mut().remove(0)
     }
 
-    fn clandestine_port(&self) -> Result<Option<u16>, PersistentConfigError> {
+    fn clandestine_port(&self) -> Result<u16, PersistentConfigError> {
         Self::result_from(&self.clandestine_port_results)
     }
 
@@ -214,7 +214,7 @@ impl PersistentConfigurationMock {
 
     pub fn clandestine_port_result(
         self,
-        result: Result<Option<u16>, PersistentConfigError>,
+        result: Result<u16, PersistentConfigError>,
     ) -> PersistentConfigurationMock {
         self.clandestine_port_results.borrow_mut().push(result);
         self

@@ -78,7 +78,7 @@ pub trait PersistentConfiguration {
         old_password_opt: Option<String>,
         new_password: &str,
     ) -> Result<(), PersistentConfigError>;
-    fn clandestine_port(&self) -> Result<Option<u16>, PersistentConfigError>;
+    fn clandestine_port(&self) -> Result<u16, PersistentConfigError>;
     fn set_clandestine_port(&mut self, port: u16) -> Result<(), PersistentConfigError>;
     fn gas_price(&self) -> Result<u64, PersistentConfigError>;
     fn set_gas_price(&mut self, gas_price: u64) -> Result<(), PersistentConfigError>;
@@ -149,9 +149,9 @@ impl PersistentConfiguration for PersistentConfigurationReal {
         Ok(writer.commit()?)
     }
 
-    fn clandestine_port(&self) -> Result<Option<u16>, PersistentConfigError> {
+    fn clandestine_port(&self) -> Result<u16, PersistentConfigError> {
         let unchecked_port = match decode_u64(self.dao.get("clandestine_port")?.value_opt)? {
-            None => return Ok(None),
+            None => panic!("ever-supplied value missing; database is corrupt!"),
             Some(port) => port,
         };
         if (unchecked_port < u64::from(LOWEST_USABLE_INSECURE_PORT))
@@ -164,7 +164,7 @@ impl PersistentConfiguration for PersistentConfigurationReal {
             );
         }
         let port = unchecked_port as u16;
-        Ok(Some(port))
+        Ok(port)
     }
 
     fn set_clandestine_port(&mut self, port: u16) -> Result<(), PersistentConfigError> {
@@ -543,6 +543,21 @@ mod tests {
 
     #[test]
     #[should_panic(
+    expected = "ever-supplied value missing; database is corrupt!"
+    )]
+    fn clandestine_port_panics_if_none_got_from_database() {
+        let config_dao = ConfigDaoMock::new().get_result(Ok(ConfigDaoRecord::new(
+            "clandestine_port",
+            None,
+            false,
+        )));
+        let subject = PersistentConfigurationReal::new(Box::new(config_dao));
+
+        subject.clandestine_port().unwrap();
+    }
+
+    #[test]
+    #[should_panic(
         expected = "Can't continue; clandestine port configuration is incorrect. Must be between 1025 and 65535, not 65536. Specify --clandestine-port <p> where <p> is an unused port."
     )]
     fn clandestine_port_panics_if_configured_port_is_too_high() {
@@ -585,7 +600,7 @@ mod tests {
 
         let result = subject.clandestine_port().unwrap();
 
-        assert_eq!(Some(4747), result);
+        assert_eq!(result,4747);
         let get_params = get_params_arc.lock().unwrap();
         assert_eq!(*get_params, vec!["clandestine_port".to_string()]);
     }
