@@ -469,8 +469,8 @@ impl Configurator {
         };
         let current_schema_version = persistent_config.current_schema_version();
         let clandestine_port =
-            Self::value_required(persistent_config.clandestine_port(), "clandestinePort")?;
-        let gas_price = Self::value_required(persistent_config.gas_price(), "gasPrice")?;
+            Self::value_required_optional(persistent_config.clandestine_port(), "clandestinePort")?;
+        let gas_price = Self::value_required_plain(persistent_config.gas_price(), "gasPrice")?;
         let consuming_wallet_derivation_path_opt = Self::value_not_required(
             persistent_config.consuming_wallet_derivation_path(),
             "consumingWalletDerivationPathOpt",
@@ -479,7 +479,7 @@ impl Configurator {
             persistent_config.earning_wallet_address(),
             "earningWalletAddressOpt",
         )?;
-        let start_block = Self::value_required(persistent_config.start_block(), "startBlock")?;
+        let start_block = Self::value_required_plain(persistent_config.start_block(), "startBlock")?;
         let (mnemonic_seed_opt, past_neighbors) = match good_password {
             Some(password) => {
                 let mnemonic_seed_opt = Self::value_not_required(
@@ -515,7 +515,17 @@ impl Configurator {
         Ok(response.tmb(context_id))
     }
 
-    fn value_required<T>(
+    fn value_required_plain<T>(
+        result: Result<T, PersistentConfigError>,
+        field_name: &str,
+    ) -> Result<T, MessageError> {
+        match result {
+            Ok(v)=> Ok(v),
+            Err(_) => Err((CONFIGURATOR_READ_ERROR, field_name.to_string())),
+        }
+    }
+
+    fn value_required_optional<T>(
         result: Result<Option<T>, PersistentConfigError>,
         field_name: &str,
     ) -> Result<T, MessageError> {
@@ -1599,12 +1609,12 @@ mod tests {
             .check_password_result(Ok(true))
             .current_schema_version_result("1.2.3")
             .clandestine_port_result(Ok(Some(1234)))
-            .gas_price_result(Ok(Some(2345)))
+            .gas_price_result(Ok(2345))
             .mnemonic_seed_result(Ok(None))
             .consuming_wallet_derivation_path_result(Ok(None))
             .past_neighbors_result(Ok(Some(vec![])))
             .earning_wallet_address_result(Ok(None))
-            .start_block_result(Ok(Some(3456)));
+            .start_block_result(Ok(3456));
         let mut subject = make_subject(Some(persistent_config));
 
         let (configuration, context_id) =
@@ -1656,16 +1666,30 @@ mod tests {
     }
 
     #[test]
-    fn value_required_handles_absent_value() {
-        let result: Result<String, MessageError> = Configurator::value_required(Ok(None), "Field");
+    fn value_required_optional_handles_absent_value() {
+        let result: Result<String, MessageError> = Configurator::value_required_optional(Ok(None), "Field");
 
         assert_eq!(result, Err((VALUE_MISSING_ERROR, "Field".to_string())))
     }
 
     #[test]
+    fn value_required_plain_works() {
+        let result: Result<u64, MessageError> = Configurator::value_required_plain(Ok(6), "Field");
+
+        assert_eq!(result, Ok(6))
+    }
+
+    #[test]
+    fn value_required_plain_handles_error() {
+        let result: Result<u64, MessageError> = Configurator::value_required_plain(Err(PersistentConfigError::NotPresent), "Field");
+
+        assert_eq!(result, Err((CONFIGURATOR_READ_ERROR, "Field".to_string())))
+    }
+
+    #[test]
     fn value_required_handles_read_error() {
         let result: Result<String, MessageError> =
-            Configurator::value_required(Err(PersistentConfigError::NotPresent), "Field");
+            Configurator::value_required_plain(Err(PersistentConfigError::NotPresent), "Field");
 
         assert_eq!(result, Err((CONFIGURATOR_READ_ERROR, "Field".to_string())))
     }

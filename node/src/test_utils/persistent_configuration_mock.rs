@@ -18,7 +18,7 @@ pub struct PersistentConfigurationMock {
     clandestine_port_results: RefCell<Vec<Result<Option<u16>, PersistentConfigError>>>,
     set_clandestine_port_params: Arc<Mutex<Vec<u16>>>,
     set_clandestine_port_results: RefCell<Vec<Result<(), PersistentConfigError>>>,
-    gas_price_results: RefCell<Vec<Result<Option<u64>, PersistentConfigError>>>,
+    gas_price_results: RefCell<Vec<Result<u64, PersistentConfigError>>>,
     set_gas_price_params: Arc<Mutex<Vec<u64>>>,
     set_gas_price_results: RefCell<Vec<Result<(), PersistentConfigError>>>,
     mnemonic_seed_params: Arc<Mutex<Vec<String>>>,
@@ -39,7 +39,7 @@ pub struct PersistentConfigurationMock {
         RefCell<Vec<Result<Option<Vec<NodeDescriptor>>, PersistentConfigError>>>,
     set_past_neighbors_params: Arc<Mutex<Vec<(Option<Vec<NodeDescriptor>>, String)>>>,
     set_past_neighbors_results: RefCell<Vec<Result<(), PersistentConfigError>>>,
-    start_block_results: RefCell<Vec<Result<Option<u64>, PersistentConfigError>>>,
+    start_block_results: RefCell<Vec<Result<u64, PersistentConfigError>>>,
     set_start_block_params: Arc<Mutex<Vec<u64>>>,
     set_start_block_results: RefCell<Vec<Result<(), PersistentConfigError>>>,
 }
@@ -81,7 +81,7 @@ impl PersistentConfiguration for PersistentConfigurationMock {
         self.set_clandestine_port_results.borrow_mut().remove(0)
     }
 
-    fn gas_price(&self) -> Result<Option<u64>, PersistentConfigError> {
+    fn gas_price(&self) -> Result<u64, PersistentConfigError> {
         Self::result_from(&self.gas_price_results)
     }
 
@@ -154,9 +154,9 @@ impl PersistentConfiguration for PersistentConfigurationMock {
         self.set_past_neighbors_results.borrow_mut().remove(0)
     }
 
-    fn start_block(&self) -> Result<Option<u64>, PersistentConfigError> {
+    fn start_block(&self) -> Result<u64, PersistentConfigError> {
         if self.start_block_results.borrow().is_empty() {
-            return Ok(Some(0));
+            return Ok(0);
         }
         Self::result_from(&self.start_block_results)
     }
@@ -292,7 +292,7 @@ impl PersistentConfigurationMock {
         self
     }
 
-    pub fn gas_price_result(self, result: Result<Option<u64>, PersistentConfigError>) -> Self {
+    pub fn gas_price_result(self, result: Result<u64, PersistentConfigError>) -> Self {
         self.gas_price_results.borrow_mut().push(result);
         self
     }
@@ -363,7 +363,7 @@ impl PersistentConfigurationMock {
         self
     }
 
-    pub fn start_block_result(self, result: Result<Option<u64>, PersistentConfigError>) -> Self {
+    pub fn start_block_result(self, result: Result<u64, PersistentConfigError>) -> Self {
         self.start_block_results.borrow_mut().push(result);
         self
     }

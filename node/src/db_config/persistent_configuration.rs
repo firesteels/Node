@@ -80,7 +80,7 @@ pub trait PersistentConfiguration {
     ) -> Result<(), PersistentConfigError>;
     fn clandestine_port(&self) -> Result<Option<u16>, PersistentConfigError>;
     fn set_clandestine_port(&mut self, port: u16) -> Result<(), PersistentConfigError>;
-    fn gas_price(&self) -> Result<Option<u64>, PersistentConfigError>;
+    fn gas_price(&self) -> Result<u64, PersistentConfigError>;
     fn set_gas_price(&mut self, gas_price: u64) -> Result<(), PersistentConfigError>;
     fn mnemonic_seed(&self, db_password: &str) -> Result<Option<PlainData>, PersistentConfigError>;
     fn mnemonic_seed_exists(&self) -> Result<bool, PersistentConfigError>;
@@ -108,7 +108,7 @@ pub trait PersistentConfiguration {
         node_descriptors_opt: Option<Vec<NodeDescriptor>>,
         db_password: &str,
     ) -> Result<(), PersistentConfigError>;
-    fn start_block(&self) -> Result<Option<u64>, PersistentConfigError>;
+    fn start_block(&self) -> Result<u64, PersistentConfigError>;
     fn set_start_block(&mut self, value: u64) -> Result<(), PersistentConfigError>;
 }
 
@@ -185,8 +185,11 @@ impl PersistentConfiguration for PersistentConfigurationReal {
         Ok(writer.commit()?)
     }
 
-    fn gas_price(&self) -> Result<Option<u64>, PersistentConfigError> {
-        Ok(decode_u64(self.dao.get("gas_price")?.value_opt)?)
+    fn gas_price(&self) -> Result<u64, PersistentConfigError> {
+        match decode_u64(self.dao.get("gas_price")?.value_opt){
+            Ok(val) => Ok(val.expect("ever-supplied value missing; database is corrupt!")),
+            Err(e) => Err(PersistentConfigError::from(e))
+        }
     }
 
     fn set_gas_price(&mut self, gas_price: u64) -> Result<(), PersistentConfigError> {
@@ -341,8 +344,11 @@ impl PersistentConfiguration for PersistentConfigurationReal {
         Ok(writer.commit()?)
     }
 
-    fn start_block(&self) -> Result<Option<u64>, PersistentConfigError> {
-        Ok(decode_u64(self.dao.get("start_block")?.value_opt)?)
+    fn start_block(&self) -> Result<u64, PersistentConfigError> {
+        match decode_u64(self.dao.get("start_block")?.value_opt){
+            Ok(val) => Ok(val.expect("ever-supplied value missing; database is corrupt!")),
+            Err(e) => Err(PersistentConfigError::from(e))
+        }
     }
 
     fn set_start_block(&mut self, value: u64) -> Result<(), PersistentConfigError> {
@@ -1353,8 +1359,23 @@ mod tests {
 
         let start_block = subject.start_block().unwrap();
 
-        assert_eq!(start_block, Some(6));
+        assert_eq!(start_block, 6);
     }
+
+    #[test]
+    #[should_panic(expected = "ever-supplied value missing; database is corrupt!")]
+    fn start_block_does_not_tolerate_optional_output() {
+        let config_dao = Box::new(ConfigDaoMock::new().get_result(Ok(ConfigDaoRecord::new(
+            "start_block",
+            None,
+            false,
+        ))));
+        let subject = PersistentConfigurationReal::new(config_dao);
+
+        let _ = subject.start_block();
+    }
+
+
 
     #[test]
     fn set_start_block_success() {
@@ -1390,7 +1411,20 @@ mod tests {
         let subject = PersistentConfigurationReal::new(config_dao);
         let gas_price = subject.gas_price().unwrap();
 
-        assert_eq!(gas_price, Some(3));
+        assert_eq!(gas_price, 3);
+    }
+
+    #[test]
+    #[should_panic(expected = "ever-supplied value missing; database is corrupt!")]
+    fn gas_price_does_not_tolerate_optional_output(){
+        let config_dao = Box::new(ConfigDaoMock::new().get_result(Ok(ConfigDaoRecord::new(
+            "gas_price",
+            None,
+            false,
+        ))));
+        let subject = PersistentConfigurationReal::new(config_dao);
+
+        let _ = subject.gas_price();
     }
 
     #[test]
