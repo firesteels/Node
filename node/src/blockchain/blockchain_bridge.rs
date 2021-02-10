@@ -141,10 +141,10 @@ impl BlockchainBridge {
             Some(consuming_wallet) => {
                 let gas_price = match self.persistent_config.gas_price() {
                     Ok(num) => num,
-                    Err(e) => {
+                    Err(err) => {
                         return MessageResult(Err(format!(
                             "ReportAccountPayable: gas-price: {:?}",
-                            e
+                            err
                         )))
                     }
                 };
@@ -534,20 +534,15 @@ mod tests {
 
     #[test]
     fn report_accounts_payable_returns_error_for_blockchain_error() {
-        let system = System::new("report_accounts_payable_returns_error_for_blockchain_error");
-
         let blockchain_interface_mock = BlockchainInterfaceMock::default()
             .get_transaction_count_result(Ok(web3::types::U256::from(1)))
             .send_transaction_result(Err(BlockchainError::TransactionFailed(String::from(
                 "mock payment failure",
             ))));
-
         let transaction_count_parameters = blockchain_interface_mock
             .get_transaction_count_parameters
             .clone();
-
         let consuming_wallet = make_wallet("somewallet");
-
         let persistent_configuration_mock =
             PersistentConfigurationMock::new().gas_price_result(Ok(3u64));
         let subject = BlockchainBridge::new(
@@ -555,27 +550,22 @@ mod tests {
             Box::new(blockchain_interface_mock),
             Box::new(persistent_configuration_mock),
         );
-        let addr: Addr<BlockchainBridge> = subject.start();
-
-        let request = addr.send(ReportAccountsPayable {
+        let request = ReportAccountsPayable {
             accounts: vec![PayableAccount {
                 wallet: make_wallet("blah"),
                 balance: 42,
                 last_paid_timestamp: SystemTime::now(),
                 pending_payment_transaction: None,
             }],
-        });
+        };
 
-        System::current().stop();
-        system.run();
-
-        let result = &request.wait().unwrap().unwrap();
+        let result = subject.handle_report_account_payable(request);
 
         assert_eq!(
-            result,
-            &[Err(BlockchainError::TransactionFailed(String::from(
+            result.0,
+            Ok(vec![Err(BlockchainError::TransactionFailed(String::from(
                 "mock payment failure"
-            )))]
+            )))])
         );
         let actual_wallet = transaction_count_parameters.lock().unwrap().remove(0);
 
@@ -584,33 +574,25 @@ mod tests {
 
     #[test]
     fn report_accounts_payable_returns_error_when_there_is_no_consuming_wallet_configured() {
-        let system = System::new("report_accounts_payable_returns_error_for_blockchain_error");
-
         let blockchain_interface_mock = BlockchainInterfaceMock::default();
         let persistent_configuration_mock = PersistentConfigurationMock::default();
-
         let subject = BlockchainBridge::new(
             &BootstrapperConfig::new(),
             Box::new(blockchain_interface_mock),
             Box::new(persistent_configuration_mock),
         );
-        let addr: Addr<BlockchainBridge> = subject.start();
-
-        let request = addr.send(ReportAccountsPayable {
+        let request = ReportAccountsPayable {
             accounts: vec![PayableAccount {
                 wallet: make_wallet("blah"),
                 balance: 42,
                 last_paid_timestamp: SystemTime::now(),
                 pending_payment_transaction: None,
             }],
-        });
+        };
 
-        System::current().stop();
-        system.run();
+        let result = subject.handle_report_account_payable(request);
 
-        let result = &request.wait().unwrap();
-
-        assert_eq!(result, &Err("No consuming wallet specified".to_string()));
+        assert_eq!(result.0, Err("No consuming wallet specified".to_string()));
     }
 
     #[test]
@@ -625,7 +607,7 @@ mod tests {
             Box::new(blockchain_interface_mock),
             Box::new(persistent_configuration_mock),
         );
-        let message = ReportAccountsPayable {
+        let request = ReportAccountsPayable {
             accounts: vec![PayableAccount {
                 wallet: make_wallet("blah"),
                 balance: 42,
@@ -634,7 +616,7 @@ mod tests {
             }],
         };
 
-        let result = subject.handle_report_account_payable(message);
+        let result = subject.handle_report_account_payable(request);
 
         assert_eq!(
             result.0,
